@@ -1,0 +1,149 @@
+MONKY is a language currently under development by [[User:Menguinponky]].
+
+It draws inspiration from [[FORTH]], [[FALSE]] and [[C]], it uses a [[Stack|data stack]] and [[Postfix_notation|reverse polish notation]].
+
+* All values on the stack are uint8_t
+* All keywords are single special symbols
+* Literals are signed integers
+* Tokens are separated by spaces
+* Extra spaces are ignored
+* Stack underflow will read as 0
+
+Stack effect notation:
+<code>(stack before -- stack after in C syntax)</code>
+
+List of all keywords:
+
+{| class="wikitable"
+! Op
+! Name
+! Stack effect
+! Meaning
+! Example → Output
+|-
+| style="text-align:center" | <code>n</code>
+| style="text-align:center" | <code>push int</code>
+| style="text-align:center" | <code>(-- n)</code>
+| Push signed integer value onto stack
+| <code>1</code>, <code>-2</code>
+|-
+| style="text-align:center" | <code>c</code>
+| style="text-align:center" | <code>push char</code>
+| style="text-align:center" | <code>(-- c)</code>
+| Push ASCII character onto stack
+| <code>a</code>, <code>T</code>
+|-
+| style="text-align:center" | <code>.</code>
+| style="text-align:center" | <code>pop int</code>
+| style="text-align:center" | <code>(n --)</code>
+| Pop integer literal from stack and print
+| <code>3 . → 3</code>, <code>a . → 97</code>
+|-
+| style="text-align:center" | <code>,</code>
+| style="text-align:center" | <code>pop char</code>
+| style="text-align:center" | <code>(c --)</code>
+| Pop ASCII character from stack and print
+| <code>a , → a</code>, <code>97 , → a</code>
+|-
+| style="text-align:center" | <code>_</code>
+| style="text-align:center" | <code>drop</code>
+| style="text-align:center" | <code>(n --)</code>
+| Discard top of stack
+| <code>4 a _ . → 4</code>
+|-
+| style="text-align:center" | <code>+</code>
+| style="text-align:center" | <code>add</code>
+| style="text-align:center" | <code>(n1 n2 -- n1+n2)</code>
+| Add two top elements of stack
+| <code>1 2 + . → 3</code>
+|-
+| style="text-align:center" | <code>-</code>
+| style="text-align:center" | <code>sub</code>
+| style="text-align:center" | <code>(n1 n2 -- n1-n2)</code>
+| Subtract top element from previous
+| <code>3 1 - . → 2</code>
+|-
+| style="text-align:center" | <code>*</code>
+| style="text-align:center" | <code>mul</code>
+| style="text-align:center" | <code>(n1 n2 -- n1*n2)</code>
+| Multiply two top elements
+| <code>2 3 * . → 6</code>
+|-
+| style="text-align:center" | <code>/</code>
+| style="text-align:center" | <code>div</code>
+| style="text-align:center" | <code>(n1 n2 -- n1/n2)</code>
+| Integer divide previous element by top
+| <code>6 2 / . → 3</code>
+|-
+| style="text-align:center" | <code>%</code>
+| style="text-align:center" | <code>dup</code>
+| style="text-align:center" | <code>(n -- n n)</code>
+| Duplicate top of stack
+| <code>3 % . . → 3 3</code>
+|-
+| style="text-align:center" | <code>$</code>
+| style="text-align:center" | <code>swap</code>
+| style="text-align:center" | <code>(n1 n2 -- n2 n1)</code>
+| Swap two top elements
+| <code>1 2 $ . . → 2 1</code>
+|-
+| style="text-align:center" | <code>^</code>
+| style="text-align:center" | <code>over</code>
+| style="text-align:center" | <code>(n1 n2 -- n1 n2 n1)</code>
+| Copy previous element to top
+| <code>1 2 ^ . . . → 1 2 1</code>
+|-
+| style="text-align:center" | <code>@</code>
+| style="text-align:center" | <code>rot</code>
+| style="text-align:center" | <code>(n1 n2 n3 -- n2 n3 n1)</code>
+| Rotate three top elements to the left
+| <code>1 2 3 @ . . . → 2 3 1</code>
+|-
+| style="text-align:center" | <code>&</code>
+| style="text-align:center" | <code>and</code>
+| style="text-align:center" | <code>(n1 n2 -- n1&n2)</code>
+| Bitwise AND two top elements
+| <code>12 10 & . → 8</code>
+|-
+| style="text-align:center" | <code>|</code>
+| style="text-align:center" | <code>or</code>
+| style="text-align:center" | <code>(n1 n2 -- n1|n2)</code>
+| Bitwise OR two top elements
+| <code>12 10 &#124; . → 14</code>
+|-
+| style="text-align:center" | <code>#</code>
+| style="text-align:center" | <code>xor</code>
+| style="text-align:center" | <code>(n1 n2 -- n1^n2)</code>
+| Bitwise XOR two topmost elements
+| <code>12 10 # . → 6</code>
+|-
+| style="text-align:center" | <code>~</code>
+| style="text-align:center" | <code>not</code>
+| style="text-align:center" | <code>(n -- ~n)</code>
+| Apply bitwise NOT to top element
+| <code>127 ~ . → 128</code>
+|-
+| style="text-align:center" | <code>!</code>
+| style="text-align:center" | <code>inv</code>
+| style="text-align:center" | <code>(n -- !n)</code>
+| Logical invert top element
+| <code>0 ! . → 1</code>, <code>1 ! . → 0</code>
+|-
+| style="text-align:center" | <code>=</code>
+| style="text-align:center" | <code>equal</code>
+| style="text-align:center" | <code>(n1 n2 -- n1==n2)</code>
+| Replace two top elements by 1 if equal, 0 if not
+| <code>1 2 = . → 0</code>, <code>3 3 = . → 1</code>
+|-
+| style="text-align:center" | <code><</code>
+| style="text-align:center" | <code>less</code>
+| style="text-align:center" | <code>(n1 n2 -- n2<n1)</code>
+| Push 1 if top is smaller than previous, 0 if not
+| <code>1 2 < . → 0</code>, <code>2 1 < . → 1</code>
+|-
+| style="text-align:center" | <code>></code>
+| style="text-align:center" | <code>greater</code>
+| style="text-align:center" | <code>(n1 n2 -- n2>n1)</code>
+| Push 1 if top is greater than previous, 0 if not
+| <code>1 2 > . → 1</code>, <code>1 2 > . → 0</code>
+|}

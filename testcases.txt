@@ -1,0 +1,52 @@
+#include <criterion/criterion.h>
+
+char monky(const char*);
+
+Test(sample_tests, should_pass_all_the_tests_provided)
+{
+    // invalid inputs
+    cr_assert_eq(monky(""), 0);
+    cr_assert_eq(monky(" "), 0);
+    cr_assert_eq(monky("{"), 0);
+    cr_assert_eq(monky("1a"), 0);
+    cr_assert_eq(monky("a1"), 0);
+    cr_assert_eq(monky("a"), 'a');          // char
+    cr_assert_eq(monky("A"), 0);            // uppercase
+  
+    cr_assert_eq(monky("."), 0);            // underflow
+    cr_assert_eq(monky("1 ."), 0);
+    cr_assert_eq(monky("2 . ."), 0);        // underflow?  
+    cr_assert_eq(monky("1 2 ."), 1);        // pop integer
+    cr_assert_eq(monky("1 a ,"), 1);        // pop char
+  
+    cr_assert_eq(monky("2 3 _"), 2);        // drop
+    cr_assert_eq(monky("1 % +"), 2);        // dup
+    cr_assert_eq(monky("1 2 $"), 1);        // swap
+    cr_assert_eq(monky("9 5 2 - -"), 6);
+    cr_assert_eq(monky("2 9 5 @ - -"), 6);  // rot
+    cr_assert_eq(monky("1 2 3 ^"), 2);      // over
+  
+    cr_assert_eq(monky("12 10 &"), 8);      // and
+    cr_assert_eq(monky("12 10 |"), 14);     // or
+    cr_assert_eq(monky("12 10 #"), 6);      // xor
+  
+    cr_assert_eq(monky("127 ~"), -128);     // bitwise not
+    cr_assert_eq(monky("1 !"), 0);          // logical not
+    cr_assert_eq(monky("0 !"), 1);
+  
+    cr_assert_eq(monky("1 2 = "), 0);       // equal
+    cr_assert_eq(monky("3 3 = "), 1);
+    cr_assert_eq(monky("1 2 < "), 0);       // less
+    cr_assert_eq(monky("2 1 < "), 1);
+    cr_assert_eq(monky("1 2 > "), 1);       // greater
+    cr_assert_eq(monky("2 1 > "), 0);
+   
+    cr_assert_eq(monky("12 % 5 / 5 * -"), 2);       // 12 mod 5
+
+    cr_assert_eq(monky("1"), 1);
+    cr_assert_eq(monky("1 2"), 2);
+    cr_assert_eq(monky("1 2 +"), 3);
+    cr_assert_eq(monky("3 2 -"), 1);
+    cr_assert_eq(monky("3 2 *"), 6);
+    cr_assert_eq(monky("8 2 /"), 4);
+}

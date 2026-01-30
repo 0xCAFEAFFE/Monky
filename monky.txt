@@ -1,0 +1,94 @@
+the MONKY language:
+heavily inspired by FORTH, also uses a stack and RPN.
+all keywords are single characters, all values on stack are chars, literals are signed
+for now assume that input string stays available and is not consumed
+underflow results in top element of 0
+
+stack effect notation: (elements on stack before -- elements on stack after)
+
+push operations (-- n):
+5   push literal to stack
+-5  push negative literal to stack
+a   push ASCII value of a to stack
+
+pop operations (n --):
+.   output top element of stack as signed char
+,   output top element as ASCII char
+_   drop top element
+§   print complete stack #######################
+
+stack operations:
+%   dup     (n -- n n)
+$   swap    (n1 n2 -- n2 n1)
+^   over    (n1 n2 -- n1 n2 n1)
+@   rot     (n1 n2 n3 -- n2 n3 n1)
+
+arithmetic operations:
++   addition        (n1 n2 -- n1 + n2)
+-   subtraction     (n1 n2 -- n1 - n2)
+*   multiplication  (n1 n2 -- n1 * n2)
+/   division        (n1 n2 -- n1 / n2)
+e.g: 1+2 -> 1 2 +
+
+logic operations:
+&   bitwise AND     (n1 n2 -- n1 & n2)
+|   bitwise OR      (n1 n2 -- n1 | n2)
+#   bitwise XOR     (n1 n2 -- n1 ^ n2)
+
+logic operations:
+~   bitwise NOT     (n -- ~n)
+!   logical NOT     (n -- !n)
+
+comparisons:
+=   check for equality      (n1 n2 -- n1 == n2)
+<   check if top is smaller (n1 n2 -- n2 < n1)
+>   check if top is larger  (n1 n2 -- n2 > n1)
+e.g: if(a!=0) ->  a ; 0 = !
+
+conditions: #######################
+?   skip next instruction if flag is zero, consumes it (n --)
+
+variables: #######################
+a-z variable names
+:   store n value in variable v (n v -- n)
+;   replace variable name with value (v -- n)
+e.g: a=5 -> 5 a :
+
+loops: #######################
+[   start of loop (no effect)
+]   end of loop, jumps back to start [
+e.g: while(i--) -> i ; [ 1 - ? ]
+
+strings: #######################
+"string"    places chars of null-terminated string on stack in reverse order
+e.g.: printf("hellorld") -> "hellorld" [ , ? ] _
+
+block: #######################
+( start of block, skip to end )
+) end of block
+e.g: if(a){bla} -> a ; ! ? (bla)
+e.g: if(a){bla}else{blub} -> a ; % ! ? ( bla ) ? ( blub )
+
+comment: #######################
+{ start of comment
+} end of comment, ignore everything between those
+don't allow ? to skip {
+
+modulo:
+12%5 -> 12 % 5 / 5 * -
+
+TODO:
+
+nested loops:
+[ bla [ blub blub ] bla ]
+needs loop level counter
+
+user input
+
+
+functions:
+A-Z     function names
+: define function
+; call function
+
+all available single char symbols: ^°!"§$%&/()=?{[]}\+*~#',.-;:_|<>
