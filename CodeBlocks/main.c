@@ -7,12 +7,10 @@
 
 #define MAX_LINE_LEN 256
 
-
 // main function; entry point
 int main(int argc, char *argv[])
 {
   bool from_file = false;
-  bool newline = false;
   char line_buf[MAX_LINE_LEN] = {0};
   FILE *in = NULL;
 
@@ -34,19 +32,21 @@ int main(int argc, char *argv[])
     in = stdin;
   }
 
+  // init monky parser
+  monky_reset();
+
   // REPL loop
   while(true)
   {
     // print cursor
     if (!from_file)
     {
-      if (newline) { printf("\n"); }
       printf("> ");
       fflush(stdout);
     }
 
     // read line - break on EOF or error
-    if (fgets(line_buf, sizeof(line_buf), in) == NULL) {  break; }
+    if (fgets(line_buf, MAX_LINE_LEN, in) == NULL) {  break; }
 
     // remove CR/LF
     size_t len = strlen(line_buf);
@@ -60,7 +60,20 @@ int main(int argc, char *argv[])
     if (from_file) { printf("> %s\n", line_buf); }
 
     // process line
-    monky(line_buf, &newline);
+    bool newline;
+    char error = monky_parse(line_buf, &newline);
+    if (newline) { printf("\n"); }
+
+    // error handling
+    if (!error)
+    {
+      printf("OK\n");
+    }
+    else
+    {
+      printf("ERROR %d\n", error);
+      monky_reset();
+    }
 
   } // end while
 
