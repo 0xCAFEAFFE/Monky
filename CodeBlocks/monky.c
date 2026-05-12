@@ -3,49 +3,60 @@
 #include <string.h>
 #include <stdbool.h>
 
+// TODO "windows only"
+#include <conio.h>
+
 #include "monky.h"
 
+// constants
+#define TOK_BUF_SIZE      64u   // limit token / string length
+#define DATA_STACK_SIZE   256u
+#define DATA_ARRAY_SIZE   128u
+#define FUNC_BUF_SIZE     256u
+
 // internal data structures and variables
-
-#define TOK_BUF_SIZE  64      // limit token / string length
-static char t[TOK_BUF_SIZE];  // global token buffer
-
 typedef struct
 {
-  int start;
-  int end;
-  int ret;
+  int start;  // start offset position (function content buffer)
+  int end;    // end offset position
+  int ret;    // input return position
 } func_t;
 
-static char s[256];  // data stack
-static char a[128];  // data array
-static char v[NUM_LETTERS];   // variables, lowercase letters
-static func_t f[NUM_LETTERS]; // function array, uppercase letters
+static char s[DATA_STACK_SIZE];   // data stack
+static char a[DATA_ARRAY_SIZE];   // data array
+static char v[NUM_LETTERS];       // variables, lowercase letters
+static char t[TOK_BUF_SIZE];      // global token buffer
+static func_t f[NUM_LETTERS];     // function index array, uppercase letters
+//static char f_buf[FUNC_BUF_SIZE]; // function content buffer
 
 static int n;           // stack pointer
 static int func;        // active function, -1 = none
 static bool execute;    // used by loops, blocks, functions to defer execution of primitive instructions
 
-static int loop_start;
-static int block_start;
-static int block_end;
+static int loop_start;  // loop return jump adress, -1 = disabled
+static int nest_lvl;    // nested block bracket counter
+//static int block_start;
+//static int block_end;
 
-// reset parser to initial state
+
+// reset all static variables to initial state
 void monky_reset(void)
 {
-  memset(&f, 0, sizeof(f));  // reset functions
-  memset(&v, 0, sizeof(v));  // reset variables
-  memset(&s, 0, sizeof(s));  // reset stack
-  memset(&a, 0, sizeof(a));  // reset data array
+  memset(&s, 0, sizeof(s));
+  memset(&a, 0, sizeof(a));
+  memset(&v, 0, sizeof(v));
+  memset(&f, 0, sizeof(f));
 
-  n = -1;         // reset stack pointer
-  func = -1;      // reset active function
-  execute = true; // reset execute flag
+  n = 0; // TODO: change to start at zero
+  func = -1;
+  execute = true;
+  nest_lvl = 0;
 
   loop_start = -1;
-  block_start = -1;
-  block_end = -1;
+  //block_start = -1;
+  //block_end = -1;
 }
+
 
 // get next whitespace separated token out of input string, starting at offset pos
 int getToken(const char *str, int *pos)
@@ -60,7 +71,9 @@ int getToken(const char *str, int *pos)
     while (str[*pos+i] && (str[*pos+i] != ' '))
     {
       // TODO: if pos > function.end -> function = 0, pos = function.ret
-      if ((*pos+i > f[func].end) && (func != -1))
+
+      // if function active
+      if ((func != -1) && (*pos+i > f[func].end))
       {
         *pos = f[func].ret;
         func = -1;
@@ -77,6 +90,24 @@ int getToken(const char *str, int *pos)
 }
 
 
+// push value to top of data stack
+void push(char in)
+{
+
+  s[n] = in;
+  n++;
+}
+
+// TODO warning "add stack index checks"
+
+// pop value from data stack
+char pop(void)
+{
+  char out = s[n-1];
+  n--;
+  return out;
+}
+
 // execute instruction string
 char monky_parse(const char* input, bool *newline)
 {
@@ -84,7 +115,8 @@ char monky_parse(const char* input, bool *newline)
   *newline = false; // print newline after output
   int len;          // token length
   int pos = 0;      // input offset position
-#warning "might as well make this global too"
+  char tmp;
+  // TODO: warning "might as well make pos global too"
 
   // parse next token
   while((len = getToken(input, &pos)))
@@ -103,14 +135,15 @@ char monky_parse(const char* input, bool *newline)
 
       // push numeric literal to stack
       if (val>127 || val<-128) { return ERROR_LITERAL_SIZE; }
-      s[++n] = (char)val;
+      if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+      s[n++] = (char)val;
     }
     else if ((sym>='a' && sym<='z' && len==1) || (sym>='A' && sym<='Z' && len==1))
     {
-      if (!execute) { continue; }
-
       // push ASCII char to stack
-      s[++n] = sym;
+      if (!execute) { continue; }
+      if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+      s[n++] = sym;
     }
     else if (len==1)
     {
@@ -118,16 +151,14 @@ char monky_parse(const char* input, bool *newline)
       switch(sym)
       {
         case '(': // block start
-          block_start = pos;
-          do
-          {
-            len = getToken(input, &pos);
-            if (!len) { return ERROR_BLOCK_END; }
-          } while (t[0]!= ')');
-          block_end = pos;
+          nest_lvl++;
+          execute = false;
           break;
 
         case ')': // block end
+          nest_lvl--;
+          if (nest_lvl<0) { return ERROR_BLOCK_END; }
+          if (!nest_lvl) execute = true;
           break;
 
         case '[': // loop start
@@ -171,6 +202,7 @@ char monky_parse(const char* input, bool *newline)
         case '>':
         case '.':
         case ',':
+        case '\'':
         case '?':
         case '!':
         case ':':
@@ -188,132 +220,145 @@ char monky_parse(const char* input, bool *newline)
       switch(sym)
       {
         case '+': // add
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] += s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] += s[n-1];
           n--;
           break;
 
         case '-': // subtract
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] -= s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] -= s[n-1];
           n--;
           break;
 
         case '*': // multiply
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] *= s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] *= s[n-1];
           n--;
           break;
 
         case '/': // divide
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] /= s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] /= s[n-1];
           n--;
           break;
 
         case '_': // drop
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
           n--;
           break;
 
         case '%': // duplicate
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          if (n>=0xff) { return ERROR_STACK_OVERFLOW; }
-          s[n+1] = s[n];
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          s[n] = s[n-1];
           n++;
           break;
 
         case '$': // swap
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          if (n>=0xff) { return ERROR_STACK_OVERFLOW; }
-          s[n+1] = s[n];
-          s[n] = s[n-1];
-          s[n-1] = s[n+1];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          tmp = s[n-1];
+          s[n-1] = s[n-2];
+          s[n-2] = tmp;
           break;
 
         case '@': // rotate
-          if (n<2) { return ERROR_STACK_UNDERFLOW; }
-          if (n>=0xff) { return ERROR_STACK_OVERFLOW; }
-          s[n+1] = s[n-2];
+          if (n<3) { return ERROR_STACK_UNDERFLOW; }
+          tmp = s[n-3];
+          s[n-3] = s[n-2];
           s[n-2] = s[n-1];
-          s[n-1] = s[n];
-          s[n] = s[n+1];
+          s[n-1] = tmp;
           break;
 
         case '^': // over
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          if (n>=0xff) { return ERROR_STACK_OVERFLOW; }
-          s[n+1] = s[n-1];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          s[n] = s[n-2];
           n++;
           break;
 
         case '\\': // pick
-          if (s[n]>=n) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n]<0) { return ERROR_STACK_OVERFLOW; }
-          s[n] = s[n-s[n]-1];
+          if (s[n-1]>=n) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
+          s[n-1] = s[n-s[n-1]-2];
           break;
 
         case '#': // count
-          n++;
           s[n] = n;
+          n++;
           break;
 
         case '&': // and
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] &= s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] &= s[n-1];
           n--;
           break;
 
         case '|': // or
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n-1] |= s[n];
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] |= s[n-1];
           n--;
           break;
 
         case '~': // bitwise not
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          s[n] = ~s[n];
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = ~s[n-1];
           break;
 
         case '=': // equal
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n] = (s[n-1] == s[n]) ? LOGIC_TRUE : LOGIC_FALSE;
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] == s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
           break;
 
         case '<': // less
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n] = (s[n] < s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] < s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
           break;
 
         case '>': // greater
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          s[n] = (s[n] > s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] > s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
           break;
 
-        case '.': // print integer
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          printf("%d ", s[n]);
+        case '.': // pop integer
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          printf("%d ", s[n-1]);
+          n--;
           *newline = true;
           break;
 
         case ',': // pop char
           if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          printf("%c", s[n--]);
+          printf("%c", s[n-1]);
+          n--;
           *newline = true;
           break;
 
+        case '\'': // read char
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          // TODO: windows only for now..
+          char c = _getch();
+          if (c == 3) { exit(0); } // intercept Ctrl+C
+          if (c == '\r') { c = '\n'; }
+          s[n] = c;
+          n++;
+          break;
+
         case '?': // skip if true
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n] != 0) { len = getToken(input, &pos); }
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1] != 0) { len = getToken(input, &pos); }
+          n--;
           break;
 
         case '!': // skip if false
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n] == 0) { len = getToken(input, &pos); }
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1] == 0) { len = getToken(input, &pos); }
+          n--;
           break;
 
         case ':': // store / define
         {
+          #warning "up next"
           if (n<=0) { return ERROR_STACK_UNDERFLOW; }
           if (s[n]>='a' && s[n]<='z')
           {
@@ -384,7 +429,7 @@ char monky_parse(const char* input, bool *newline)
       if (!execute) { continue; }
 
       // push string onto stack in reverse order
-      for (int i=l; i>=0; i--) { s[++n] = t[i]; }
+      for (int i=l; i>=0; i--) { s[n++] = t[i]; }
     }
     else
     {
@@ -393,7 +438,7 @@ char monky_parse(const char* input, bool *newline)
 
   } // end while
 
-  return ERROR_NONE;
+  return execute ? ERROR_NONE : ERROR_SILENT;
 }
 
 

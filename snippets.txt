@@ -1,0 +1,20 @@
+stack flush dirty: (returns with error)
+[ _ ]
+
+stack flush clean:
+[ _ # ! ]
+
+stack dump reverse dirty:
+[ . ]
+
+stack dump reverse clean
+[ . # ! ]
+
+stack print: (non-destructive)
+# [ % \ . 1 - % ! ]
+
+echo forever:
+[ ' , ]
+
+echo until return:
+10 [ ' % , = ? ]

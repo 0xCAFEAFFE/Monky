@@ -32,7 +32,8 @@ int main(int argc, char *argv[])
     in = stdin;
   }
 
-  // init monky parser
+  // init monky interpreter
+  printf("MNKYNTRPRTR v0.1\n");
   monky_reset();
 
   // REPL loop
@@ -65,14 +66,18 @@ int main(int argc, char *argv[])
     if (newline) { printf("\n"); }
 
     // error handling
-    if (!error)
+    switch(error)
     {
-      printf("OK\n");
-    }
-    else
-    {
-      printf("ERROR %d\n", error);
-      monky_reset();
+      case ERROR_NONE:
+        printf("OK\n");
+        break;
+
+      case ERROR_SILENT:
+        break;
+
+      default:
+        printf("ERROR %d\n", error);
+        monky_reset();
     }
 
   } // end while

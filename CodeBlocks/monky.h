@@ -15,6 +15,8 @@
 #define ERROR_FUNCTION_UNDEF    -10
 #define ERROR_FUNCTION_NEST     -11
 
+#define ERROR_SILENT            -99
+
 #define NUM_LETTERS             26 // number of letters A-Z in alphabet
 
 char monky_parse(const char* input, bool *newline);
