@@ -5,9 +5,14 @@
 	<string.h>
 	<stdbool.h>
 
-1777224646 source:d:\eigene dateien\projects\monky\codeblocks\main.c
+1778574917 source:d:\eigene dateien\projects\monky\codeblocks\main.c
 	<stdio.h>
 	<stdlib.h>
 	<string.h>
 	<stdbool.h>
+	"monky.h"
+
+1778008886 source:d:\eigene dateien\projects\monky\codeblocks\monky.c
+
+1778574917 d:\eigene dateien\projects\monky\codeblocks\monky.h
 
