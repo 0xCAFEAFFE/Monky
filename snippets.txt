@@ -1,20 +1,38 @@
 stack flush dirty: (returns with error)
 [ _ ]
 
-stack flush clean:
-[ _ # ! ]
-
 stack dump reverse dirty:
 [ . ]
+
+stack flush clean:
+[ _ # ! ]
 
 stack dump reverse clean
 [ . # ! ]
 
 stack print: (non-destructive)
-# [ % \ . 1 - % ! ]
+# [ % \ . 1 - % ! ] _
 
 echo forever:
 [ ' , ]
 
 echo until return:
 10 [ ' % , = ? ]
+
+string output dirty:
+"hello" [ , ] 
+
+string output clean:
+"hello" [ % , ! ] 
+
+modulo:
+^ ^ / * - .
+
+fib:
+0 1 [ ^ ^ + % . @ _ ' _ ]
+
+xor:
+^ ^ ~ & @ @ $ ~ & |
+
+debug:
+1 { + } 2 A : { - } B :

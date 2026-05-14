@@ -17,7 +17,7 @@
 
 #define ERROR_SILENT            -99
 
-#define NUM_LETTERS             26 // number of letters A-Z in alphabet
+// TODO check which of these are used
 
-char monky_parse(const char* input, bool *newline);
+char monky_parse(char* input, bool *newline);
 void monky_reset(void);

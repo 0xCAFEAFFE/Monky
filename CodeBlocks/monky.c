@@ -13,6 +13,7 @@
 #define DATA_STACK_SIZE   256u
 #define DATA_ARRAY_SIZE   128u
 #define FUNC_BUF_SIZE     256u
+#define NUM_LETTERS       26 // number of letters A-Z in alphabet
 
 // internal data structures and variables
 typedef struct
@@ -22,118 +23,89 @@ typedef struct
   int ret;    // input return position
 } func_t;
 
-static char s[DATA_STACK_SIZE];   // data stack
-static char a[DATA_ARRAY_SIZE];   // data array
+static char s[DATA_STACK_SIZE];   // data stack, top of stack at index -1
 static char v[NUM_LETTERS];       // variables, lowercase letters
-static char t[TOK_BUF_SIZE];      // global token buffer
 static func_t f[NUM_LETTERS];     // function index array, uppercase letters
-//static char f_buf[FUNC_BUF_SIZE]; // function content buffer
+static char f_buf[FUNC_BUF_SIZE]; // function content buffer
+static char a[DATA_ARRAY_SIZE];   // random access data array
+static char t[TOK_BUF_SIZE];      // global token buffer
 
-static int n;           // stack pointer
-static int func;        // active function, -1 = none
-static bool execute;    // used by loops, blocks, functions to defer execution of primitive instructions
-
-static int loop_start;  // loop return jump adress, -1 = disabled
-static int nest_lvl;    // nested block bracket counter
-//static int block_start;
-//static int block_end;
-
+static int n;           // stack pointer, s[n] points to empty element,
+static int loop_start;  // loop return jump address, -1 = disabled
+static int block_depth; // nested block bracket counter
+static int f_active;    // active function index, -1 = none
+static int f_start;     // function start offset
+static int f_end;       // function end offset
+static int f_pos;       // position offset for function buffer
+static bool f_def;      // true while function is being defined
 
 // reset all static variables to initial state
 void monky_reset(void)
 {
   memset(&s, 0, sizeof(s));
-  memset(&a, 0, sizeof(a));
   memset(&v, 0, sizeof(v));
+  memset(&a, 0, sizeof(a));
   memset(&f, 0, sizeof(f));
+    memset(&f_buf, 0, sizeof(f_buf)); // debug
 
-  n = 0; // TODO: change to start at zero
-  func = -1;
-  execute = true;
-  nest_lvl = 0;
-
+  n = 0;
   loop_start = -1;
-  //block_start = -1;
-  //block_end = -1;
+  block_depth = 0;
+  f_active = -1;
+  f_start = 0;
+  f_end = 0;
+  f_pos = 0;
+  f_def = false;
 }
 
 
 // get next whitespace separated token out of input string, starting at offset pos
-int getToken(const char *str, int *pos)
+int getToken(char *src, int *pos)
 {
     // skip leading spaces
     int skips = 0;
-    while (str[*pos+skips] == ' ') { skips++; }
+    while (src[*pos+skips] == ' ') { skips++; }
     *pos += skips;
 
     // copy from input to global token buffer
-    int i = 0; // token length
-    while (str[*pos+i] && (str[*pos+i] != ' '))
+    int l = 0; // token length
+    while (src[*pos+l] && (src[*pos+l] != ' '))
     {
-      // TODO: if pos > function.end -> function = 0, pos = function.ret
-
-      // if function active
-      if ((func != -1) && (*pos+i > f[func].end))
-      {
-        *pos = f[func].ret;
-        func = -1;
-        i = 0;
-        break;
-      }
-      t[i]=str[*pos+i];
-      if (++i>=TOK_BUF_SIZE) { return ERROR_LITERAL_INVALID; }
+      t[l]=src[*pos+l];
+      if (++l>=TOK_BUF_SIZE) { return ERROR_LITERAL_INVALID; }
     }
-    *pos += i;
 
-    t[i] = 0; // null-terminate string
-    return i; // return length
+    *pos += l;  // advance input offset
+    t[l] = 0;   // null-terminate string
+    return l;   // return length
 }
 
-
-// push value to top of data stack
-void push(char in)
-{
-
-  s[n] = in;
-  n++;
-}
-
-// TODO warning "add stack index checks"
-
-// pop value from data stack
-char pop(void)
-{
-  char out = s[n-1];
-  n--;
-  return out;
-}
 
 // execute instruction string
-char monky_parse(const char* input, bool *newline)
+char monky_parse(char* input, bool *newline)
 {
   // init
-  *newline = false; // print newline after output
-  int len;          // token length
-  int pos = 0;      // input offset position
-  char tmp;
-  // TODO: warning "might as well make pos global too"
+  char *token_src = input;  // start with user input as token source
+  *newline = false;         // print newline after output
+  int pos = 0;              // next input offset position
+  int len;                  // current token length
 
   // parse next token
-  while((len = getToken(input, &pos)))
+  while((len = getToken(token_src, &pos)))
   {
     // try converting token to literal
     char *end;
     int val = strtol(t, &end, 10);
     char sym = t[0];
 
-    // DEBUG
-    //printf("%d %s %d %c %d\n", pos, t, len, sym, val);
+    // execute primitive keywords only if we are not
+    // jumping a block or defining a function
+    bool skip_prim = (block_depth || f_def);
 
     if (!*end)
     {
-      if (!execute) { continue; }
-
       // push numeric literal to stack
+      if (skip_prim) { continue; }
       if (val>127 || val<-128) { return ERROR_LITERAL_SIZE; }
       if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
       s[n++] = (char)val;
@@ -141,48 +113,63 @@ char monky_parse(const char* input, bool *newline)
     else if ((sym>='a' && sym<='z' && len==1) || (sym>='A' && sym<='Z' && len==1))
     {
       // push ASCII char to stack
-      if (!execute) { continue; }
+      if (skip_prim) { continue; }
       if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
       s[n++] = sym;
     }
     else if (len==1)
     {
-      // decode structural keywords in any case
+      // decode structural keywords always
+      char tmp;
       switch(sym)
       {
         case '(': // block start
-          nest_lvl++;
-          execute = false;
+          block_depth++;
           break;
 
         case ')': // block end
-          nest_lvl--;
-          if (nest_lvl<0) { return ERROR_BLOCK_END; }
-          if (!nest_lvl) execute = true;
+          block_depth--;
+          if (block_depth<0) { block_depth = 0; }
           break;
 
         case '[': // loop start
+          if (skip_prim) { break; }
           loop_start = pos-len;
+          // TODO: this is too simple if we want to have nested loops..
           break;
 
         case ']': // loop end
+          if (skip_prim) { break; }
           if (loop_start == -1) { return ERROR_LOOP_START; }
-          pos = loop_start;
+          pos = loop_start; // jump back
           loop_start = -1;
           break;
 
         case '{': // function start
-          if (execute != true) { return ERROR_FUNCTION_NEST; }
-          execute = false;
+          if (f_def) { return ERROR_FUNCTION_NEST; }
+          f_def = true;
+          f_start = pos;
           break;
-
+#warning "check if this works"
         case '}': // function end
-          if (execute != false) { return ERROR_FUNCTION_NEST; }
-          execute = true;
+          if (f_active == -1)
+          {
+            // function definition
+            if (!f_def) { return ERROR_FUNCTION_NEST; }
+            f_def = false;
+            f_end = pos;
+          }
+          else
+          {
+            // function execution
+            token_src = input;
+            pos = f[f_active].ret;
+            f_active = -1;
+          }
           break;
 
-        // all fallthrough, handled in second switch statement outside
-        // needed to check for unknown instructions even if execute = false
+        // fall-through needed to check for unknown instructions even if not executed
+        // specific logic handled in separate switch statement outside
         case '+':
         case '-':
         case '*':
@@ -214,8 +201,7 @@ char monky_parse(const char* input, bool *newline)
 
       } // end structural switch
 
-      // decode primitive keywords only if execute flag is set
-      if (!execute) { continue; }
+      if (skip_prim) { continue; }
 
       switch(sym)
       {
@@ -280,7 +266,7 @@ char monky_parse(const char* input, bool *newline)
         case '\\': // pick
           if (s[n-1]>=n) { return ERROR_STACK_UNDERFLOW; }
           if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
-          s[n-1] = s[n-s[n-1]-2];
+          s[n-1] = s[n-s[n-1]-2]; // index 1 return previous element
           break;
 
         case '#': // count
@@ -300,7 +286,7 @@ char monky_parse(const char* input, bool *newline)
           n--;
           break;
 
-        case '~': // bitwise not
+        case '~': // not
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
           s[n-1] = ~s[n-1];
           break;
@@ -338,14 +324,14 @@ char monky_parse(const char* input, bool *newline)
           if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
           // TODO: windows only for now..
           char c = _getch();
-          if (c == 3) { exit(0); } // intercept Ctrl+C
-          if (c == '\r') { c = '\n'; }
-          s[n] = c;
-          n++;
+          if (c == 3) { exit(0); }      // intercept Ctrl+C
+          if (c == '\r') { c = '\n'; }  // convert CR to LF
+          s[n++] = c;
           break;
 
         case '?': // skip if true
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          #warning "will fail if input is function buffer"
           if (s[n-1] != 0) { len = getToken(input, &pos); }
           n--;
           break;
@@ -358,27 +344,33 @@ char monky_parse(const char* input, bool *newline)
 
         case ':': // store / define
         {
-          #warning "up next"
-          if (n<=0) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n]>='a' && s[n]<='z')
+          if (s[n-1]>='a' && s[n-1]<='z')
           {
             // variable
-            v[s[n]-'a'] = s[n-1];
+            if (n<2) { return ERROR_STACK_UNDERFLOW; }
+            v[s[n-1]-'a'] = s[n-2];
           }
-          else if (s[n]<0)
+          else if (s[n-1]<0)
           {
             // data array: -128..-1 (0x80-0xff), ASCII: 0..127 (0x00-0x7f)
-            unsigned char i = s[n];
-            a[(int)(i-0x80)] = s[n-1];
+            if (n<2) { return ERROR_STACK_UNDERFLOW; }
+            unsigned char i = s[n-1];
+            a[(int)(i-0x80)] = s[n-2];
           }
-          else if (s[n]>='A' && s[n]<='Z')
+          else if (s[n-1]>='A' && s[n-1]<='Z')
           {
             // define function
-            /*
-            int i = s[n]-'A';
-            f[i].start = block_start;
-            f[i].end = block_end;
-            */
+            if (n<1) { return ERROR_STACK_UNDERFLOW; }
+            int i = s[n-1]-'A';
+            f[i].start = f_pos;
+
+            // copy from input to to function buffer
+            for(int p=f_start+1; p<=f_end; p++)
+            {
+              //printf("%c",input[p]);
+              f_buf[f_pos++] = input[p];
+            }
+            f[i].end = f_pos;
           }
           else { return ERROR_DATA_INDEX; }
           n--;
@@ -387,29 +379,36 @@ char monky_parse(const char* input, bool *newline)
 
         case ';': // load / call
         {
-          if (n<0) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n]>='a' && s[n]<='z')
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]>='a' && s[n-1]<='z')
           {
             // variable
-            s[n] = v[s[n]-'a'];
+            s[n-1] = v[s[n-1]-'a'];
           }
-          else if (s[n]<0)
+          else if (s[n-1]<0)
           {
             // data array
-            unsigned char i = s[n];
-            s[n] = a[(int)(i-0x80)];
+            unsigned char i = s[n-1];
+            s[n-1] = a[(int)(i-0x80)];
           }
-          else if (s[n]>='A' && s[n]<='Z')
+          else if (s[n-1]>='A' && s[n-1]<='Z')
           {
-            // call function
-            /*
-            int i = s[n]-'A';
+            // get function index
+            int i = s[n-1]-'A';
             if (f[i].start == f[i].end) { return ERROR_FUNCTION_UNDEF; }
-            func = i;
+            n--; // pop index from stack
+
+            // debug out
+            //for(int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
+            #warning "redefining function does not yet work"
+
+            // switch token source to function buffer
+            f_active = i;
+            #warning "claude says this wrong, double deref"
+            //token_src = &f_buf[f[i].start];
+            token_src = f_buf;
             f[i].ret = pos;
             pos = f[i].start;
-            n--;
-            */
           }
           else { return ERROR_DATA_INDEX; }
           break;
@@ -426,19 +425,24 @@ char monky_parse(const char* input, bool *newline)
       pos = pos-len+l+2;
       t[l] = 0; // null-terminate
 
-      if (!execute) { continue; }
+      if (skip_prim) { continue; }
 
       // push string onto stack in reverse order
       for (int i=l; i>=0; i--) { s[n++] = t[i]; }
     }
     else
     {
+      printf("<<%c %s>>", sym, t);
+      printf("<<%s>>", f_buf);
+      #warning "why do we end up here?!"
       return ERROR_LITERAL_INVALID;
     }
 
   } // end while
 
-  return execute ? ERROR_NONE : ERROR_SILENT;
+  #warning "todo"
+  //return exec_instr ? ERROR_NONE : ERROR_SILENT;
+  return ERROR_NONE;
 }
 
 
