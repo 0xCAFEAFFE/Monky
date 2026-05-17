@@ -12,12 +12,10 @@
 #define ERROR_LITERAL_SIZE      -7
 #define ERROR_DATA_INDEX        -8
 #define ERROR_STACK_OVERFLOW    -9
-#define ERROR_FUNCTION_UNDEF    -10
-#define ERROR_FUNCTION_NEST     -11
+#define ERROR_FUNC_UNDEF        -10
+#define ERROR_FUNC_NESTING      -11
 
 #define ERROR_SILENT            -99
-
-// TODO check which of these are used
 
 char monky_parse(char* input, bool *newline);
 void monky_reset(void);

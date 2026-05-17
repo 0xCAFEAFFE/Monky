@@ -12,14 +12,15 @@ int main(int argc, char *argv[])
 {
   bool from_file = false;
   char line_buf[MAX_LINE_LEN] = {0};
-  FILE *in = NULL;
+  FILE *src = NULL;
+  char cursor = '>';
 
   // determine input source
   if (argc >= 2)
   {
     // input from file
-    in = fopen(argv[1], "r");
-    if (in == NULL)
+    src = fopen(argv[1], "r");
+    if (src == NULL)
     {
       fprintf(stderr, "Error: Unable to open file \"%s\".\n", argv[1]);
       return EXIT_FAILURE;
@@ -29,7 +30,7 @@ int main(int argc, char *argv[])
   else
   {
     // command line input
-    in = stdin;
+    src = stdin;
   }
 
   // init monky interpreter
@@ -42,12 +43,12 @@ int main(int argc, char *argv[])
     // print cursor
     if (!from_file)
     {
-      printf("> ");
+      printf("%c ", cursor);
       fflush(stdout);
     }
 
     // read line - break on EOF or error
-    if (fgets(line_buf, MAX_LINE_LEN, in) == NULL) {  break; }
+    if (fgets(line_buf, MAX_LINE_LEN, src) == NULL) {  break; }
 
     // remove CR/LF
     size_t len = strlen(line_buf);
@@ -58,7 +59,7 @@ int main(int argc, char *argv[])
     if (len == 0) { continue; }
 
     // echo file input
-    if (from_file) { printf("> %s\n", line_buf); }
+    if (from_file) { printf("%c %s\n", cursor, line_buf); }
 
     // process line
     bool newline;
@@ -70,9 +71,11 @@ int main(int argc, char *argv[])
     {
       case ERROR_NONE:
         printf("OK\n");
+        cursor = '>';
         break;
 
       case ERROR_SILENT:
+        cursor = '|';
         break;
 
       default:
@@ -83,7 +86,7 @@ int main(int argc, char *argv[])
   } // end while
 
   // close file
-  if (from_file) { fclose(in); }
+  if (from_file) { fclose(src); }
 
   return EXIT_SUCCESS;
 }
