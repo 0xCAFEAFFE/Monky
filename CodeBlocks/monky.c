@@ -34,9 +34,10 @@
 // internal data structures and variables
 typedef struct
 {
-  int start;  // start offset position (function content buffer)
-  int end;    // end offset position
-  int ret;    // input return position
+  int start;    // start offset position (function content buffer)
+  int end;      // end offset position
+  int ret_pos;  // input return position
+  int ret_func; // previously active function
 } func_t;
 
 static char s[DATA_STACK_SIZE];   // data stack, top of stack at index -1
@@ -103,318 +104,323 @@ char monky_parse(char* ui_buf, bool *newline)
   int len;                  // current token length
 
   // parse next token
-  while((len = getToken(tok_src, &pos)))
+  while ((len = getToken(tok_src, &pos)))
   {
     // try converting token to literal
     char *end;
     int val = strtol(t, &end, 10);
     char sym = t[0];
 
+    // DEBUG
+    //printf(">%c<\n",sym);
+
+    // special handling of function keywords before primitive instructions
+    if ((sym == '{') && (len==1))
+    {
+      // function start
+      if (f_def) { return ERROR_FUNC_DEF; }
+      f_def = true;
+      f_start = f_pos;
+      continue;
+    }
+
+    // check if we're defining a function
+    if (f_def)
+    {
+      // copy tokens to function buffer
+      for (int p=pos-len; p<pos+1; p++)
+      {
+        //printf("%c", ui_buf[p]);
+        f_buf[f_pos++] = ui_buf[p];
+        if (f_pos>=FUNC_BUF_SIZE) { return ERROR_FUNC_BUFFER; }
+      }
+    }
+
+    if ((sym == '}') && (len==1))
+    {
+      // function end
+      if (f_active == -1)
+      {
+        // end of function definition
+        if (!f_def) { return ERROR_FUNC_DEF; }
+        f_def = false;
+        f_end = f_pos;
+        //for (int p=0; p<f_pos; p++) { printf("%c", f_buf[p]); }
+      }
+      else
+      {
+        // end of function execution
+        tok_src = ui_buf;
+        pos = f[f_active].ret_pos;
+        f_active = f[f_active].ret_func;
+      }
+      continue;
+    }
+
+    // skip primitive token execution
+    if (f_def) { continue; }
+
     if (!*end)
     {
       // push numeric literal to stack
-      if (f_def) { continue; }
-      if (val>127 || val<-128) { return ERROR_LITERAL_SIZE; }
+      if (val>127 || val<-128) { return ERROR_LITERAL_INVALID; }
       if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
       s[n++] = (char)val;
     }
     else if ((sym>='a' && sym<='z' && len==1) || (sym>='A' && sym<='Z' && len==1))
     {
       // push ASCII char to stack
-      if (f_def) { continue; }
       if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
       s[n++] = sym;
     }
-    else if (len==1)
+    else if (len==1) // primitive instructions
     {
-      // function keywords first
+      char tmp;
       switch(sym)
       {
-        case '{': // function start
+        case '+': // add
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] += s[n-1];
+          n--;
+          break;
+
+        case '-': // subtract
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] -= s[n-1];
+          n--;
+          break;
+
+        case '*': // multiply
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] *= s[n-1];
+          n--;
+          break;
+
+        case '/': // divide
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] /= s[n-1];
+          n--;
+          break;
+
+        case '_': // drop
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          n--;
+          break;
+
+        case '%': // duplicate
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          s[n] = s[n-1];
+          n++;
+          break;
+
+        case '$': // swap
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          tmp = s[n-1];
+          s[n-1] = s[n-2];
+          s[n-2] = tmp;
+          break;
+
+        case '@': // rotate
+          if (n<3) { return ERROR_STACK_UNDERFLOW; }
+          tmp = s[n-3];
+          s[n-3] = s[n-2];
+          s[n-2] = s[n-1];
+          s[n-1] = tmp;
+          break;
+
+        case '^': // over
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          s[n] = s[n-2];
+          n++;
+          break;
+
+        case '\\': // pick
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]>=n-1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
+          s[n-1] = s[n-s[n-1]-2]; // index 0 return previous element
+          break;
+
+        case '#': // count
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          s[n] = n;
+          n++;
+          break;
+
+        case '&': // and
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] &= s[n-1];
+          n--;
+          break;
+
+        case '|': // or
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] |= s[n-1];
+          n--;
+          break;
+
+        case '~': // not
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = ~s[n-1];
+          break;
+
+        case '=': // equal
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] == s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
+          break;
+
+        case '<': // less
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] < s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
+          break;
+
+        case '>': // greater
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-1] = (s[n-2] > s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
+          break;
+
+        case '.': // pop integer
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          printf("%d ", s[n-1]);
+          n--;
+          *newline = true;
+          break;
+
+        case ',': // pop char
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          printf("%c", s[n-1]);
+          n--;
+          *newline = true;
+          break;
+
+        case '\'': // read char
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+          char c = _getch();
+          if (c == 3) { exit(0); }      // intercept Ctrl+C
+          if (c == '\r') { c = '\n'; }  // convert CR to LF
+          s[n++] = c;
+          break;
+
+        case '?': // skip if true
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1] != 0) { len = getToken(tok_src, &pos); }
+          n--;
+          break;
+
+        case '!': // skip if false
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1] == 0) { len = getToken(tok_src, &pos); }
+          n--;
+          break;
+
+        case '(': // block start
         {
-          if (f_def) { return ERROR_FUNC_NESTING; }
-          f_def = true;
-          f_start = pos;
+          // skip forward to matching block end
+          int depth = 1;
+          while (depth > 0)
+          {
+            len = getToken(tok_src, &pos);
+            if (!len) { return ERROR_BLOCK_END; }
+            if ((f_active != -1) && (pos > f[f_active].end)) { return ERROR_BLOCK_END; }
+            if (t[0] == '(') depth++;
+            if (t[0] == ')') depth--;
+          }
           break;
         }
 
-        case '}': // function end
+        case ')': // block end
+          // nothing to do, block start jumps to this
+          break;
+
+        case '[': // loop start
+          // nothing to do, loop end scans back to this
+          break;
+
+        case ']': // loop end
         {
-          if (f_active == -1)
+          int depth = 1;
+          int p = pos-len-1; // start just before token
+          int bound = (f_active == -1) ? 0 : f[f_active].start;
+          while ((p>=bound) && (depth>0))
           {
-            // function definition
-            if (!f_def) { return ERROR_FUNC_NESTING; }
-            f_def = false;
-            f_end = pos;
+            if (tok_src[p] == ']') depth++;
+            if (tok_src[p] == '[') depth--;
+            if (depth > 0) p--;
           }
-          else
-          {
-            // function execution
-            tok_src = ui_buf;
-            pos = f[f_active].ret;
-            f_active = -1;
-          }
+          if (depth != 0) { return ERROR_LOOP_START; }
+          pos = p; // jump back to matching loop start
           break;
         }
 
-        // handle primitive instructions only if we're not defining a function
+        case ':': // store / define
+        {
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]>='a' && s[n-1]<='z')
+          {
+            // variable
+            if (n<2) { return ERROR_STACK_UNDERFLOW; }
+            v[s[n-1]-'a'] = s[n-2];
+          }
+          else if (s[n-1]<0)
+          {
+            // data array: -128..-1 (0x80-0xff), ASCII: 0..127 (0x00-0x7f)
+            if (n<2) { return ERROR_STACK_UNDERFLOW; }
+            unsigned char i = s[n-1];
+            a[(int)(i-0x80)] = s[n-2];
+          }
+          else if (s[n-1]>='A' && s[n-1]<='Z')
+          {
+            // define function
+            int i = s[n-1]-'A';
+            f[i].start = f_start;
+            f[i].end = f_end;
+            //for (int p=f_start; p<f_end; p++) { printf("%c", f_buf[p]); }
+          }
+          else { return ERROR_DATA_INDEX; }
+          n--;
+          break;
+        }
+
+        case ';': // load / call
+        {
+          if (n<1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]>='a' && s[n-1]<='z')
+          {
+            // variable
+            s[n-1] = v[s[n-1]-'a'];
+          }
+          else if (s[n-1]<0)
+          {
+            // data array
+            unsigned char i = s[n-1];
+            s[n-1] = a[(int)(i-0x80)];
+          }
+          else if (s[n-1]>='A' && s[n-1]<='Z')
+          {
+            // get function index
+            int i = s[n-1]-'A';
+            if (f[i].start == f[i].end) { return ERROR_FUNC_UNDEF; }
+            n--; // pop index from stack
+
+            //for (int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
+
+            // switch token source to function buffer
+            f[i].ret_func = f_active;
+            f_active = i;
+            tok_src = f_buf;
+            f[i].ret_pos = pos;
+            pos = f[i].start;
+          }
+          else { return ERROR_DATA_INDEX; }
+          break;
+        }
+
         default:
-        {
-          char tmp;
-          switch(sym)
-          {
-            case '+': // add
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] += s[n-1];
-              n--;
-              break;
+          return ERROR_UNKNOWN_CMD;
 
-            case '-': // subtract
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] -= s[n-1];
-              n--;
-              break;
-
-            case '*': // multiply
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] *= s[n-1];
-              n--;
-              break;
-
-            case '/': // divide
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] /= s[n-1];
-              n--;
-              break;
-
-            case '_': // drop
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              n--;
-              break;
-
-            case '%': // duplicate
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
-              s[n] = s[n-1];
-              n++;
-              break;
-
-            case '$': // swap
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              tmp = s[n-1];
-              s[n-1] = s[n-2];
-              s[n-2] = tmp;
-              break;
-
-            case '@': // rotate
-              if (n<3) { return ERROR_STACK_UNDERFLOW; }
-              tmp = s[n-3];
-              s[n-3] = s[n-2];
-              s[n-2] = s[n-1];
-              s[n-1] = tmp;
-              break;
-
-            case '^': // over
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
-              s[n] = s[n-2];
-              n++;
-              break;
-
-            case '\\': // pick
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1]>=n) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
-              s[n-1] = s[n-s[n-1]-2]; // index 1 return previous element
-              break;
-
-            case '#': // count
-              if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
-              s[n] = n;
-              n++;
-              break;
-
-            case '&': // and
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] &= s[n-1];
-              n--;
-              break;
-
-            case '|': // or
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-2] |= s[n-1];
-              n--;
-              break;
-
-            case '~': // not
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              s[n-1] = ~s[n-1];
-              break;
-
-            case '=': // equal
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-1] = (s[n-2] == s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
-              break;
-
-            case '<': // less
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-1] = (s[n-2] < s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
-              break;
-
-            case '>': // greater
-              if (n<2) { return ERROR_STACK_UNDERFLOW; }
-              s[n-1] = (s[n-2] > s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
-              break;
-
-            case '.': // pop integer
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              printf("%d ", s[n-1]);
-              n--;
-              *newline = true;
-              break;
-
-            case ',': // pop char
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              printf("%c", s[n-1]);
-              n--;
-              *newline = true;
-              break;
-
-            case '\'': // read char
-              if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
-              // TODO: windows only for now..
-              char c = _getch();
-              if (c == 3) { exit(0); }      // intercept Ctrl+C
-              if (c == '\r') { c = '\n'; }  // convert CR to LF
-              s[n++] = c;
-              break;
-
-            case '?': // skip if true
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1] != 0) { len = getToken(tok_src, &pos); }
-              n--;
-              break;
-
-            case '!': // skip if false
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1] == 0) { len = getToken(tok_src, &pos); }
-              n--;
-              break;
-
-            case '(': // block start
-            {
-              // skip forward to matching block end
-              int depth = 1;
-              while (depth > 0)
-              {
-                len = getToken(tok_src, &pos);
-                if (!len) { return ERROR_BLOCK_END; }
-                if ((f_active != -1) && (pos > f[f_active].end)) { return ERROR_BLOCK_END; }
-                if (t[0] == '(') depth++;
-                if (t[0] == ')') depth--;
-              }
-              break;
-            }
-
-            case ')': // block end
-              // nothing to do, block start jumps to this
-              break;
-
-            case '[': // loop start
-              // nothing to do, loop end scans back to this
-              break;
-
-            case ']': // loop end
-            {
-              int depth = 1;
-              int p = pos-len-1; // start just before token
-              int bound = (f_active == -1) ? 0 : f[f_active].start;
-              while ((p>=bound) && (depth>0))
-              {
-                if (tok_src[p] == ']') depth++;
-                if (tok_src[p] == '[') depth--;
-                if (depth > 0) p--;
-              }
-              if (depth != 0) { return ERROR_LOOP_START; }
-              pos = p; // jump back to matching loop start
-              break;
-            }
-
-            case ':': // store / define
-            {
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1]>='a' && s[n-1]<='z')
-              {
-                // variable
-                if (n<2) { return ERROR_STACK_UNDERFLOW; }
-                v[s[n-1]-'a'] = s[n-2];
-              }
-              else if (s[n-1]<0)
-              {
-                // data array: -128..-1 (0x80-0xff), ASCII: 0..127 (0x00-0x7f)
-                if (n<2) { return ERROR_STACK_UNDERFLOW; }
-                unsigned char i = s[n-1];
-                a[(int)(i-0x80)] = s[n-2];
-              }
-              else if (s[n-1]>='A' && s[n-1]<='Z')
-              {
-                // define function
-                int i = s[n-1]-'A';
-                f[i].start = f_pos;
-
-                // copy from input to to function buffer
-                for(int p=f_start+1; p<=f_end; p++)
-                {
-                  //printf("%c",ui_buf[p]); // debug
-                  f_buf[f_pos++] = ui_buf[p];
-                }
-                f[i].end = f_pos;
-              }
-              else { return ERROR_DATA_INDEX; }
-              n--;
-              break;
-            }
-
-            case ';': // load / call
-            {
-              if (n<1) { return ERROR_STACK_UNDERFLOW; }
-              if (s[n-1]>='a' && s[n-1]<='z')
-              {
-                // variable
-                s[n-1] = v[s[n-1]-'a'];
-              }
-              else if (s[n-1]<0)
-              {
-                // data array
-                unsigned char i = s[n-1];
-                s[n-1] = a[(int)(i-0x80)];
-              }
-              else if (s[n-1]>='A' && s[n-1]<='Z')
-              {
-                // get function index
-                int i = s[n-1]-'A';
-                if (f[i].start == f[i].end) { return ERROR_FUNC_UNDEF; }
-                n--; // pop index from stack
-
-                // debug
-                for(int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
-
-                // switch token source to function buffer
-                f_active = i;
-                tok_src = f_buf;
-                f[i].ret = pos;
-                pos = f[i].start;
-              }
-              else { return ERROR_DATA_INDEX; }
-              break;
-            }
-
-            default:
-              return ERROR_UNKNOWN_CMD;
-
-          } // end inner switch
-        } // end outer default
-      } // end outer switch
+      } // end switch
     }
     else if (sym=='"')
     {
@@ -426,10 +432,12 @@ char monky_parse(char* ui_buf, bool *newline)
       pos = pos-len+l+2;
       t[l] = 0; // null-terminate
 
-      if (f_def) { continue; }
-
       // push string onto stack in reverse order
-      for (int i=l; i>=0; i--) { s[n++] = t[i]; }
+      for (int i=l; i>=0; i--)
+      {
+        if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
+        s[n++] = t[i];
+      }
     }
     else
     {
@@ -438,13 +446,7 @@ char monky_parse(char* ui_buf, bool *newline)
 
   } // end while
 
-  // disallow multi-line functions (for now)
-  // renders check below useless (for now)
-  if (f_def) { return ERROR_FUNC_NESTING; }
-
-  // don't print OK while we are defining a multi line function
-  return f_def ? ERROR_SILENT : ERROR_NONE;
-
+  return f_def ? ERROR_NONE_FUNC : ERROR_NONE;
 }
 
 

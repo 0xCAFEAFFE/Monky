@@ -70,16 +70,15 @@ int main(int argc, char *argv[])
     switch(error)
     {
       case ERROR_NONE:
-        printf("OK\n");
         cursor = '>';
         break;
 
-      case ERROR_SILENT:
+      case ERROR_NONE_FUNC:
         cursor = '|';
         break;
 
       default:
-        printf("ERROR %d\n", error);
+        printf("E%d\n", error);
         monky_reset();
     }
 
