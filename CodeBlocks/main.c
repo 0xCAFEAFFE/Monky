@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
   }
 
   // init monky interpreter
-  printf("MNKYNTRPRTR v0.1\n");
+  printf("MONKYNTRPRTR v%s\n", MONKYNTRPRTR_VER);
   monky_reset();
 
   // REPL loop

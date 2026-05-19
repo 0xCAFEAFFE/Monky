@@ -16,5 +16,7 @@
 #define ERROR_FUNC_BUFFER       -11
 #define ERROR_NONE_FUNC         -12
 
+#define MONKYNTRPRTR_VER        "0.2"
+
 char monky_parse(char* input, bool *newline);
 void monky_reset(void);

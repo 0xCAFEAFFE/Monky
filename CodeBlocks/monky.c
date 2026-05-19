@@ -54,7 +54,7 @@ static int f_end;       // function end offset
 static int f_pos;       // position offset for function buffer
 static bool f_def;      // true while function is being defined
 
-// reset all static variables to initial state
+// reset all static variables to initial state, called at init and on error
 void monky_reset(void)
 {
   memset(&s, 0, sizeof(s));
@@ -110,9 +110,6 @@ char monky_parse(char* ui_buf, bool *newline)
     char *end;
     int val = strtol(t, &end, 10);
     char sym = t[0];
-
-    // DEBUG
-    //printf(">%c<\n",sym);
 
     // special handling of function keywords before primitive instructions
     if ((sym == '{') && (len==1))
@@ -245,7 +242,7 @@ char monky_parse(char* ui_buf, bool *newline)
           if (n<2) { return ERROR_STACK_UNDERFLOW; }
           if (s[n-1]>=n-1) { return ERROR_STACK_UNDERFLOW; }
           if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
-          s[n-1] = s[n-s[n-1]-2]; // index 0 return previous element
+          s[n-1] = s[n-s[n-1]-2]; // index 0 returns item before index
           break;
 
         case '#': // count
@@ -269,6 +266,12 @@ char monky_parse(char* ui_buf, bool *newline)
         case '~': // not
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
           s[n-1] = ~s[n-1];
+          break;
+
+        case '`': // xor
+          if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          s[n-2] ^= s[n-1];
+          n--;
           break;
 
         case '=': // equal
