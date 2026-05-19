@@ -130,9 +130,12 @@ char monky_parse(char* ui_buf, bool *newline)
       // copy tokens to function buffer
       for (int p=pos-len; p<pos+1; p++)
       {
-        //printf("%c", ui_buf[p]);
-        f_buf[f_pos++] = ui_buf[p];
+        // replace null byte with space for multi line functions
+        f_buf[f_pos++] = ui_buf[p] ? ui_buf[p] : ' ';
         if (f_pos>=FUNC_BUF_SIZE) { return ERROR_FUNC_BUFFER; }
+
+        // debug
+        //printf("%c", ui_buf[p]);
       }
     }
 
@@ -145,14 +148,16 @@ char monky_parse(char* ui_buf, bool *newline)
         if (!f_def) { return ERROR_FUNC_DEF; }
         f_def = false;
         f_end = f_pos;
+
+        // debug
         //for (int p=0; p<f_pos; p++) { printf("%c", f_buf[p]); }
       }
       else
       {
         // end of function execution
-        tok_src = ui_buf;
         pos = f[f_active].ret_pos;
         f_active = f[f_active].ret_func;
+        if (f_active == -1) { tok_src = ui_buf; }
       }
       continue;
     }
@@ -376,7 +381,9 @@ char monky_parse(char* ui_buf, bool *newline)
             int i = s[n-1]-'A';
             f[i].start = f_start;
             f[i].end = f_end;
-            //for (int p=f_start; p<f_end; p++) { printf("%c", f_buf[p]); }
+
+            // debug
+            //for (int p=f_start; p<f_end; p++) { printf("%d ", f_buf[p]); }
           }
           else { return ERROR_DATA_INDEX; }
           n--;
@@ -404,6 +411,7 @@ char monky_parse(char* ui_buf, bool *newline)
             if (f[i].start == f[i].end) { return ERROR_FUNC_UNDEF; }
             n--; // pop index from stack
 
+            // debug
             //for (int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
 
             // switch token source to function buffer

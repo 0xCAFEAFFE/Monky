@@ -34,5 +34,5 @@ fib:
 xor:
 ^ ^ ~ & @ @ $ ~ & |
 
-debug:
-1 { + } 2 A : { - } B :
+print all strings:
+[ [ % , ! ] # ! ]
