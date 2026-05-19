@@ -3,25 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 
-#ifdef _WIN32
-  #include <conio.h>
-#else
-  #include <termios.h>
-  #include <unistd.h>
-  static int _getch(void) {
-      struct termios oldt, newt;
-      tcgetattr(STDIN_FILENO, &oldt);
-      newt = oldt;
-      newt.c_lflag &= ~(ICANON | ECHO);
-      newt.c_cc[VMIN] = 1;
-      newt.c_cc[VTIME] = 0;
-      tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-      int c = getchar();
-      tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-      return c == EOF ? 0 : c;
-  }
-#endif
-
+// TODO: windows only for now
+#include <conio.h>
 #include "monky.h"
 
 // constants
@@ -339,10 +322,12 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case ')': // block end
           // nothing to do, block start jumps to this
+          #warning "bug if string contains ) "
           break;
 
         case '[': // loop start
           // nothing to do, loop end scans back to this
+          #warning "bug if string contains [ "
           break;
 
         case ']': // loop end
