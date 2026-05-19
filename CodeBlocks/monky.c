@@ -289,10 +289,9 @@ char monky_parse(char* ui_buf, bool *newline)
           s[n-1] = (s[n-2] > s[n-1]) ? LOGIC_TRUE : LOGIC_FALSE;
           break;
 
-        case '.': // pop integer
+        case '.': // print integer
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
           printf("%d ", s[n-1]);
-          n--;
           *newline = true;
           break;
 
