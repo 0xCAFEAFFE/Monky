@@ -45,7 +45,7 @@ void monky_reset(void)
   memset(&a, 0, sizeof(a));
   memset(&f, 0, sizeof(f));
   memset(&f_buf, 0, sizeof(f_buf));
-
+#warning "keep func defs"
   n = 0;
   f_active = -1;
   f_start = 0;
@@ -307,16 +307,24 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case '(': // block start
         {
-          // skip forward to matching block end
           int depth = 1;
-          while (depth > 0)
+          int p = pos; // start just after token
+          bool string = false;
+
+          // skip forward to matching block end
+          while (tok_src[p] && depth > 0)
           {
-            len = getToken(tok_src, &pos);
-            if (!len) { return ERROR_BLOCK_END; }
-            if ((f_active != -1) && (pos > f[f_active].end)) { return ERROR_BLOCK_END; }
-            if (t[0] == '(') depth++;
-            if (t[0] == ')') depth--;
+            if (tok_src[p] == '"') { string ^= true; }
+            else if (!string)
+            {
+                if (tok_src[p] == '(') { depth++; }
+                if (tok_src[p] == ')') { depth--; }
+            }
+            if (depth > 0) p++;
           }
+          if (depth != 0) { return ERROR_BLOCK_END; }
+          if (f_active != -1 && p > f[f_active].end) { return ERROR_BLOCK_END; }
+          pos = p + 1; // skip past block end
           break;
         }
 
