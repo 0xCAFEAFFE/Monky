@@ -322,12 +322,10 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case ')': // block end
           // nothing to do, block start jumps to this
-          #warning "bug if string contains ) "
           break;
 
         case '[': // loop start
           // nothing to do, loop end scans back to this
-          #warning "bug if string contains [ "
           break;
 
         case ']': // loop end
@@ -335,14 +333,23 @@ char monky_parse(char* ui_buf, bool *newline)
           int depth = 1;
           int p = pos-len-1; // start just before token
           int bound = (f_active == -1) ? 0 : f[f_active].start;
+          bool string = false;
+
+          // search for matching loop start
           while ((p>=bound) && (depth>0))
           {
-            if (tok_src[p] == ']') depth++;
-            if (tok_src[p] == '[') depth--;
-            if (depth > 0) p--;
+            // skip over strings
+            if (tok_src[p] == '"') { string ^= true; }
+            else if (!string)
+            {
+              if (tok_src[p] == ']') { depth++; }
+              else if (tok_src[p] == '[') { depth--; }
+            }
+
+            if (depth > 0) { p--; }
           }
           if (depth != 0) { return ERROR_LOOP_START; }
-          pos = p; // jump back to matching loop start
+          pos = p; // jump back
           break;
         }
 
