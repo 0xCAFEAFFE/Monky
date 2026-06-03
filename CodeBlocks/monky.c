@@ -14,6 +14,13 @@
 #define FUNC_BUF_SIZE     256u
 #define NUM_LETTERS       26 // number of letters A-Z in alphabet
 
+#warning "TODO"
+/*
+1) make getToken skip over strings without string.h
+2) make getToken work in both directions
+3) refactor to old system of flags to skip execution
+*/
+
 // internal data structures and variables
 typedef struct
 {
@@ -45,7 +52,8 @@ void monky_reset(void)
   memset(&a, 0, sizeof(a));
   memset(&f, 0, sizeof(f));
   memset(&f_buf, 0, sizeof(f_buf));
-#warning "keep func defs"
+#warning "keep func defs between errors "
+
   n = 0;
   f_active = -1;
   f_start = 0;
@@ -53,7 +61,6 @@ void monky_reset(void)
   f_pos = 0;
   f_def = false;
 }
-
 
 // get next whitespace separated token out of input string, starting at offset pos
 int getToken(char *src, int *pos)
@@ -65,10 +72,12 @@ int getToken(char *src, int *pos)
 
     // copy from input to global token buffer
     int l = 0; // token length
+    bool str = false;
     while (src[*pos+l] && (src[*pos+l] != ' '))
     {
       t[l] = src[*pos+l];
-      if (++l>=TOK_BUF_SIZE) { return ERROR_LITERAL_INVALID; }
+      l++;
+      if (l>=TOK_BUF_SIZE) { return ERROR_LITERAL_INVALID; }
     }
 
     *pos += l;  // advance input offset
@@ -281,7 +290,6 @@ char monky_parse(char* ui_buf, bool *newline)
         case ',': // pop char
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
           printf("%c", s[n-1]);
-          n--;
           *newline = true;
           break;
 

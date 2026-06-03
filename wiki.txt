@@ -1,22 +1,21 @@
 {{WIP}}
 
-'''Monky''' is yet another stack-based language developed over the course of a weekend by [[User:Menguinponky]].
+'''Monky''' is yet another stack-based language designed over the course of a weekend by [[User:Menguinponky]].
 
 == Overview ==
 
 It draws inspiration from [[FORTH]], [[FALSE]] and [[C]], it also uses a [[Stack|data stack]] and [[Postfix_notation|reverse polish notation]] and is tailored for fast execution by a simple interpreter on a DIY 8-bit machine, while keeping the syntax somewhat readable.
 
-* All values on the stack are 8-bit
 * All keywords are single special characters
 * All printable ASCII characters have a function
-* Numeric literals are signed 8-bit integers covering <code>-128</code> to <code>+127</code>
+* Numeric literals are signed integers
 * Single characters and strings can also be pushed onto the stack
 * Input tokens are separated by spaces
 * Extra whitespaces and newline characters are ignored
 * Stack underflow will terminate the program
 * Named variables can be used through the letters <code>a-z</code>
 * Functions can be defined and called using letters <code>A-Z</code>
-* An additional 128 byte data array is available
+* An additional data array is available
 
 == Characteristics ==
 
@@ -24,7 +23,7 @@ Note that although most instructions in the table below have familiar equivalent
 
 The comparison operations only consume the top item and leave the previous value on the stack. It is often necessary to compare a value to a range of other values, for example in a <code>switch/case</code> structure, keeping the previous value on the stack easily allows that without having to duplicate it for every comparison.
 
-Neither the instruction to print the top value as an integer <code>.</code> nor the instruction to store the top value into a variable <code>:</code> consume the top value, but the instruction to print the top as char <code>,</code> does consume it. Chars are most likely to be printed and will therefor be popped from the stack while integers stay there for further calculation. This also allows to insert <code>.</code> at any point for debugging output without side effects.
+Neither the instruction to print the top stack item as an integer <code>.</code> or char <code>,</code> nor the instruction to store the top value into a variable <code>:</code> consume it, instead it stays there for further calculation. This also allows to insert <code>.</code> at any point for debugging output without side effects.
 
 The logical value <code>false</code> is represented by <code>0</code> while <code>true</code> is nominally represented by <code>-1</code>, so that the <code>~</code> instruction can be used for logical inversion, though all non-zero values are interpreted as true.
 
@@ -73,29 +72,29 @@ Example notation:
 | Push ASCII character onto stack
 | <code>a → a</code>
 |-
+| style="text-align:center" | <code>_</code>
+| style="text-align:center" | <code>drop</code>
+| style="text-align:center" | <code>n --</code>
+| Pop and discard top of stack
+| <code>2 3 _ → 2</code>
+|-
 | style="text-align:center" | <code>.</code>
 | style="text-align:center" | <code>print int</code>
 | style="text-align:center" | <code>n -- n</code>
 | Print top of stack as signed integer
-| <code>3 . → 3 ⇒ 3</code>
+| <code>3 . → 3 ⇒ 3</code>, <code>-4 . _ ⇒ -4</code>
 |-
 | style="text-align:center" | <code>,</code>
-| style="text-align:center" | <code>pop char</code>
-| style="text-align:center" | <code>c --</code>
-| Pop and print top of stack as ASCII character
-| <code>a , ⇒ a</code>
+| style="text-align:center" | <code>print char</code>
+| style="text-align:center" | <code>c -- c</code>
+| Print top of stack as ASCII character
+| <code>a , → a ⇒ a</code>, <code>b , _ ⇒ b</code>
 |-
 | style="text-align:center" | <code>'</code>
 | style="text-align:center" | <code>get char</code>
 | style="text-align:center" | <code>-- c</code>
 | Get char from user input and push onto stack (blocking)
 | <code>' → c</code>
-|-
-| style="text-align:center" | <code>_</code>
-| style="text-align:center" | <code>drop</code>
-| style="text-align:center" | <code>n --</code>
-| Pop and discard top of stack
-| <code>2 3 _ → 2</code>
 |-
 | style="text-align:center" | <code>+</code>
 | style="text-align:center" | <code>add</code>
@@ -278,13 +277,13 @@ The following instructions have multiple functions:
 | style="text-align:center" | <code>:</code>
 | style="text-align:center" | <code>store data</code>
 | style="text-align:center" | <code>n i -- n</code>
-| Store top value to data array index <code>-1..-128</code>
+| Store top value to negative data array index
 | <code>5 -10 : → 5</code>
 |-
 | style="text-align:center" | <code>;</code>
 | style="text-align:center" | <code>load data</code>
 | style="text-align:center" | <code>i -- d[i]</code>
-| Load variable from data array index <code>-1..-128</code> to top
+| Load variable from negative data array index
 | <code>-10 ; → 5</code>
 |-
 | style="text-align:center" | <code>:</code>
@@ -308,7 +307,7 @@ The following instructions have multiple functions:
 
 ===[[Cat program]]===
 
- [ ' , ]
+ [ ' , _ ]
 
 ===[[Looping counter]]===
 
@@ -324,7 +323,7 @@ The following instructions have multiple functions:
 
 ===[[Hello, world!]]===
 
- "hellorld" [ % , ! ]
+ "hellorld" [ , ! ]
 
 ===[[Comment]]===
 
@@ -340,16 +339,22 @@ The following instructions have multiple functions:
 
  i=5; while(i){print(i--)} → 5 [ % ? ( . 1 - ] )
 
+ view(stack) → # [ % \ . _ 1 - % ! ] _
+
 Note that blocks and loops are allowed to overlap, like in the last example above.
 
-== Interpreter ==
+== [[Computational class]] ==
 
-An interpreter is under development and can be found in a public GitHub repository: https://github.com/0xCAFEAFFE/Monky
+Although no definite proof exists yet, the language is assumed to be [[Turing-complete]].
 
 == Limitations ==
 
 Loops and blocks may not span multiple lines unless within a function.
 
 The language does not allow recursive function calls, this is by design because these structures are rarely indispensable in practical programs, functions calling other functions are fine though.
+
+== Interpreter ==
+
+An interpreter is under development and can be found in a public GitHub repository: https://github.com/0xCAFEAFFE/Monky
 
 [[Category:Languages]] [[Category:2026]] [[Category:Implemented]]
