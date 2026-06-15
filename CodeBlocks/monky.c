@@ -8,12 +8,13 @@
 #include "monky.h"
 
 // constants
-#define TOK_BUF_SIZE      64u   // limit token / string length
+#define TOK_BUF_SIZE      128u   // limit token / string length
 #define DATA_STACK_SIZE   256u
 #define DATA_ARRAY_SIZE   128u
 #define FUNC_BUF_SIZE     256u
 #define NUM_LETTERS       26 // number of letters A-Z in alphabet
 
+#warning "pathetic bug: "hello" works, " hi" does not"
 #warning "TODO"
 /*
 1) make getToken skip over strings without string.h
@@ -232,9 +233,10 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case '\\': // pick
           if (n<2) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n-1]>=n-1) { return ERROR_STACK_UNDERFLOW; }
+          if (s[n-1]>=n) { return ERROR_STACK_UNDERFLOW; }
           if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
-          s[n-1] = s[n-s[n-1]-2]; // index 0 returns item before index
+          s[n] = s[n-s[n-1]-1]; // index 0 returns index itself
+          n++;
           break;
 
         case '#': // count
@@ -291,6 +293,7 @@ char monky_parse(char* ui_buf, bool *newline)
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
           printf("%c", s[n-1]);
           *newline = true;
+          n--;
           break;
 
         case '\'': // read char

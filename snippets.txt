@@ -1,38 +1,57 @@
 stack flush dirty: (returns with error)
 [ _ ]
 
-stack dump reverse dirty:
-[ . ]
-
 stack flush clean:
 [ _ # ! ]
 
-stack dump reverse clean
+
+stack dump top-to-bot dirty:
+[ . ]
+
+stack dump top-to-bot clean
 [ . # ! ]
 
-stack print: (non-destructive)
-# [ % \ . _ 1 - % ! ] _
+stack dump bot-to-top order: (non-destructive)
+# [ \ . _ 1 - % ! ] _
+
+stack dup:
+# % 1 + [ \ @ 1 - % ? ( @ ] ) _ $ _
 
 echo forever:
-[ ' , _ ]
+[ ' , ]
 
-echo until return:
-10 [ ' , = ? ]
+echo until newline:
+[ ' % 10 = ! ( , ] )
 
-string output:
-"hello" [ , ! ] 
+string print:
+"hello" [ % , ! ]
+
+string print without null:
+"hello"  [ % ? ( , ] )
+
+string print non-destructive:
+"hello" 1 [ \ % ? ( , 1 + ] ) _ _
 
 modulo:
 ^ ^ / * - .
 
 fib:
-0 1 [ ^ ^ + % . @ _ ' _ ]
+0 1 [ % @ + . ' _ ]
 
 xor:
 ^ ^ ~ & @ @ $ ~ & |
 
 print all strings:
-[ [ , ! ] # ! ]
+[ [ , % ! ] # ! ]
 
 string in nested loop:
-3 [ "helloworld" [ , ! ] 1 - % ! ]
+3 [ "helloworld" [ , % ! ] 1 - % ! ]
+
+quine: (consuming pop char, pick index=0 returns index=0)
+{ 1 [ \ % ? ( , 1 + ] ) _ _ } P : -> print string non-consuming
+"string" 34 , P ; 34 , 32 , P ; -> prints "string" string
+
+final:
+"{ 1 [ \ % ? ( , 1 + ] ) _ _ } P : 34 , P ; 34 , 32 , P ;" { 1 [ \ % ? ( , 1 + ] ) _ _ } P : 34 , P ; 34 , 32 , P ;
+
+
