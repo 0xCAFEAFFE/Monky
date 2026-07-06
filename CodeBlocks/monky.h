@@ -1,4 +1,5 @@
 
+// constant definitions
 #define LOGIC_TRUE -1
 #define LOGIC_FALSE 0
 
@@ -15,8 +16,14 @@
 #define ERROR_FUNC_UNDEF        -10
 #define ERROR_FUNC_BUFFER       -11
 #define ERROR_NONE_FUNC         -12
+#define ERROR_ABORT             -13
 
-#define MONKYNTRPRTR_VER        "0.2"
+#define MONKYNTRPRTR_VER        "0.3"
 
+// macros
+#define MEMCLR(x) memset(&(x), 0, sizeof(x))
+
+// public function prototypes
 char monky_parse(char* input, bool *newline);
 void monky_reset(void);
+void monky_init(void);

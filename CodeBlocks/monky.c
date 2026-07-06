@@ -8,19 +8,11 @@
 #include "monky.h"
 
 // constants
-#define TOK_BUF_SIZE      128u   // limit token / string length
+#define TOK_BUF_SIZE      128u  // limits token / string length
 #define DATA_STACK_SIZE   256u
 #define DATA_ARRAY_SIZE   128u
 #define FUNC_BUF_SIZE     256u
-#define NUM_LETTERS       26 // number of letters A-Z in alphabet
-
-#warning "pathetic bug: "hello" works, " hi" does not"
-#warning "TODO"
-/*
-1) make getToken skip over strings without string.h
-2) make getToken work in both directions
-3) refactor to old system of flags to skip execution
-*/
+#define NUM_LETTERS       26u   // number of letters A-Z in alphabet
 
 // internal data structures and variables
 typedef struct
@@ -45,23 +37,56 @@ static int f_end;       // function end offset
 static int f_pos;       // position offset for function buffer
 static bool f_def;      // true while function is being defined
 
-// reset all static variables to initial state, called at init and on error
-void monky_reset(void)
+// reset stack and variables but keep function definitions
+void monky_flush(void)
 {
-  memset(&s, 0, sizeof(s));
-  memset(&v, 0, sizeof(v));
-  memset(&a, 0, sizeof(a));
-  memset(&f, 0, sizeof(f));
-  memset(&f_buf, 0, sizeof(f_buf));
-#warning "keep func defs between errors "
+  MEMCLR(s);
+  MEMCLR(v);
+  MEMCLR(a);
 
   n = 0;
   f_active = -1;
   f_start = 0;
   f_end = 0;
-  f_pos = 0;
   f_def = false;
 }
+
+// reset all static variables to initial state, called at init
+void monky_reset(void)
+{
+  monky_flush();
+
+  MEMCLR(f);
+  MEMCLR(f_buf);
+
+  f_pos = 0;
+}
+
+/*
+// TODO:
+// add findChar function that can search forward and backward
+// use it in getToken, block, loop, function
+// make it skip/store string dependent on mode
+
+// search char c in input string str starting from position pos
+// dir=0 -> forward; dir=1 backward
+// return position
+
+int findChar(char* str, int pos, char c, bool dir)
+{
+  int off = pos; // string position offset
+#warning "different limits for both directions"
+  //int limit = dir ? 0 : sizeof(strbuffer)
+
+  while (str[off])
+  {
+    if (str[off] == c) { break; }
+    off += dir ? -1 : 1;
+  }
+
+  return off;
+}
+*/
 
 // get next whitespace separated token out of input string, starting at offset pos
 int getToken(char *src, int *pos)
@@ -73,7 +98,6 @@ int getToken(char *src, int *pos)
 
     // copy from input to global token buffer
     int l = 0; // token length
-    bool str = false;
     while (src[*pos+l] && (src[*pos+l] != ' '))
     {
       t[l] = src[*pos+l];
@@ -299,7 +323,7 @@ char monky_parse(char* ui_buf, bool *newline)
         case '\'': // read char
           if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
           char c = _getch();
-          if (c == 3) { exit(0); }      // intercept Ctrl+C
+          if (c == 3) { return ERROR_ABORT; } // intercept Ctrl+C
           if (c == '\r') { c = '\n'; }  // convert CR to LF
           s[n++] = c;
           break;
@@ -320,18 +344,13 @@ char monky_parse(char* ui_buf, bool *newline)
         {
           int depth = 1;
           int p = pos; // start just after token
-          bool string = false;
 
           // skip forward to matching block end
-          while (tok_src[p] && depth > 0)
+          while (tok_src[p] && (depth > 0))
           {
-            if (tok_src[p] == '"') { string ^= true; }
-            else if (!string)
-            {
-                if (tok_src[p] == '(') { depth++; }
-                if (tok_src[p] == ')') { depth--; }
-            }
-            if (depth > 0) p++;
+            if (tok_src[p] == '(') { depth++; }
+            if (tok_src[p] == ')') { depth--; }
+            if (depth > 0) { p++; }
           }
           if (depth != 0) { return ERROR_BLOCK_END; }
           if (f_active != -1 && p > f[f_active].end) { return ERROR_BLOCK_END; }
@@ -352,19 +371,12 @@ char monky_parse(char* ui_buf, bool *newline)
           int depth = 1;
           int p = pos-len-1; // start just before token
           int bound = (f_active == -1) ? 0 : f[f_active].start;
-          bool string = false;
 
           // search for matching loop start
-          while ((p>=bound) && (depth>0))
+          while ((p>=bound) && (depth > 0))
           {
-            // skip over strings
-            if (tok_src[p] == '"') { string ^= true; }
-            else if (!string)
-            {
-              if (tok_src[p] == ']') { depth++; }
-              else if (tok_src[p] == '[') { depth--; }
-            }
-
+            if (tok_src[p] == ']') { depth++; }
+            if (tok_src[p] == '[') { depth--; }
             if (depth > 0) { p--; }
           }
           if (depth != 0) { return ERROR_LOOP_START; }
@@ -443,6 +455,11 @@ char monky_parse(char* ui_buf, bool *newline)
 
       } // end switch
     }
+    else
+    {
+      return ERROR_LITERAL_INVALID;
+    }
+    /*
     else if (sym=='"')
     {
       // tokenize until " symbol
@@ -460,10 +477,8 @@ char monky_parse(char* ui_buf, bool *newline)
         s[n++] = t[i];
       }
     }
-    else
-    {
-      return ERROR_LITERAL_INVALID;
-    }
+    */
+
 
   } // end while
 

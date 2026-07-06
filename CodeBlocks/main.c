@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
 
       default:
         printf("E%d\n", error);
-        monky_reset();
+        monky_flush();
     }
 
   } // end while
