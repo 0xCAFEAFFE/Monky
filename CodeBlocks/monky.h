@@ -3,6 +3,9 @@
 #define LOGIC_TRUE -1
 #define LOGIC_FALSE 0
 
+#define DIR_FORWARD   1
+#define DIR_BACKWARD -1
+
 #define ERROR_NONE               0
 #define ERROR_STACK_UNDERFLOW   -1
 #define ERROR_STACK_OVERFLOW    -2
@@ -15,8 +18,9 @@
 #define ERROR_FUNC_DEF          -9
 #define ERROR_FUNC_UNDEF        -10
 #define ERROR_FUNC_BUFFER       -11
-#define ERROR_NONE_FUNC         -12
-#define ERROR_ABORT             -13
+#define ERROR_FUNC_RECURSION    -12
+#define ERROR_NONE_FUNC         -13
+#define ERROR_ABORT             -14
 
 #define MONKYNTRPRTR_VER        "0.3"
 
@@ -26,4 +30,4 @@
 // public function prototypes
 char monky_parse(char* input, bool *newline);
 void monky_reset(void);
-void monky_init(void);
+void monky_flush(void);

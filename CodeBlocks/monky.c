@@ -257,6 +257,7 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case '\\': // pick
           if (n<2) { return ERROR_STACK_UNDERFLOW; }
+          if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
           if (s[n-1]>=n) { return ERROR_STACK_UNDERFLOW; }
           if (s[n-1]<0) { return ERROR_STACK_OVERFLOW; }
           s[n] = s[n-s[n-1]-1]; // index 0 returns index itself
@@ -321,12 +322,14 @@ char monky_parse(char* ui_buf, bool *newline)
           break;
 
         case '\'': // read char
+        {
           if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
           char c = _getch();
           if (c == 3) { return ERROR_ABORT; } // intercept Ctrl+C
           if (c == '\r') { c = '\n'; }  // convert CR to LF
           s[n++] = c;
           break;
+        }
 
         case '?': // skip if true
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
@@ -435,6 +438,12 @@ char monky_parse(char* ui_buf, bool *newline)
             int i = s[n-1]-'A';
             if (f[i].start == f[i].end) { return ERROR_FUNC_UNDEF; }
             n--; // pop index from stack
+
+            // reject recursion
+            for (int j=f_active; j!=-1; j=f[j].ret_func)
+            {
+              if (i==j) { return ERROR_FUNC_RECURSION; }
+            }
 
             // debug
             //for (int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
