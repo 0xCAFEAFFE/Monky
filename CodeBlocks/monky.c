@@ -52,6 +52,7 @@ void monky_flush(void)
   f_def = false;
 }
 
+
 // reset all static variables to initial state, called at init
 void monky_reset(void)
 {
@@ -63,13 +64,18 @@ void monky_reset(void)
   f_pos = 0;
 }
 
+
+// skip leading spaces
+void skipSpaces(const char *src, int *p)
+{
+  while (src[*p] == ' ') { *p+=1; }
+}
+
+
 // find char c in string src starting from offset p
 int findChar(const char *src, int p, char c)
 {
   bool str_lit = false;
-
-  // skip leading spaces - required by skip instructions
-  while (src[p] == ' ') { p++; }
 
   while (src[p])
   {
@@ -119,10 +125,10 @@ char monky_parse(char* ui_buf, bool *newline)
   while (true)
   {
     // skip leading spaces
-    while (tok_src[pos] == ' ') { pos++; }
+    skipSpaces(tok_src, &pos);
 
     // handle string literal
-    if (tok_src[pos] == '"')
+    if (!f_def && (tok_src[pos] == '"'))
     {
       // find end of string
       int end = findChar(tok_src, pos+1, '"');
@@ -168,9 +174,6 @@ char monky_parse(char* ui_buf, bool *newline)
         // replace null byte with space for multi line functions
         f_buf[f_pos++] = ui_buf[p] ? ui_buf[p] : ' ';
         if (f_pos>=FUNC_BUF_SIZE) { return ERROR_FUNC_BUFFER; }
-
-        // debug
-        //printf("%c", ui_buf[p]);
       }
     }
 
@@ -183,9 +186,6 @@ char monky_parse(char* ui_buf, bool *newline)
         if (!f_def) { return ERROR_FUNC_DEF; }
         f_def = false;
         f_end = f_pos;
-
-        // debug
-        //for (int p=0; p<f_pos; p++) { printf("%c", f_buf[p]); }
       }
       else
       {
@@ -354,14 +354,22 @@ char monky_parse(char* ui_buf, bool *newline)
 
         case '?': // skip if true
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n-1] != 0) { pos = findChar(tok_src, pos, ' '); }
+          if (s[n-1] != 0)
+          {
+            skipSpaces(tok_src, &pos);
+            pos = findChar(tok_src, pos, ' ');
+          }
           if (pos<0) { return ERROR_STRING_END; }
           n--;
           break;
 
         case '!': // skip if false
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
-          if (s[n-1] == 0) { pos = findChar(tok_src, pos, ' '); }
+          if (s[n-1] == 0)
+          {
+            skipSpaces(tok_src, &pos);
+            pos = findChar(tok_src, pos, ' ');
+          }
           if (pos<0) { return ERROR_STRING_END; }
           n--;
           break;
@@ -384,6 +392,7 @@ char monky_parse(char* ui_buf, bool *newline)
 
             if (depth > 0) { p++; }
           }
+          if (str_lit) { return ERROR_STRING_END; }
           if (depth != 0) { return ERROR_BLOCK_END; }
           if (f_active != -1 && p > f[f_active].end) { return ERROR_BLOCK_END; }
           pos = p + 1; // skip past block end
@@ -444,9 +453,6 @@ char monky_parse(char* ui_buf, bool *newline)
             int i = s[n-1]-'A';
             f[i].start = f_start;
             f[i].end = f_end;
-
-            // debug
-            //for (int p=f_start; p<f_end; p++) { printf("%d ", f_buf[p]); }
           }
           else { return ERROR_DATA_INDEX; }
           n--;
@@ -480,9 +486,6 @@ char monky_parse(char* ui_buf, bool *newline)
               if (i==j) { return ERROR_FUNC_RECURSION; }
             }
 
-            // debug
-            //for (int p=f[i].start; p<f[i].end; p++) { printf("%c", f_buf[p]); }
-
             // switch token source to function buffer
             f[i].ret_func = f_active;
             f_active = i;
@@ -503,27 +506,6 @@ char monky_parse(char* ui_buf, bool *newline)
     {
       return ERROR_LITERAL_INVALID;
     }
-    /*
-    else if (sym=='"')
-    {
-      // tokenize until " symbol
-      char *str = (char*)tok_src+pos-len+1;
-      int l = strcspn(str, "\"");
-      if (str[l]!='"') { return ERROR_STRING_END; }
-      strncpy(t, str, l);
-      pos = pos-len+l+2;
-      t[l] = 0; // null-terminate
-
-      // push string onto stack in reverse order
-      for (int i=l; i>=0; i--)
-      {
-        if (n>=DATA_STACK_SIZE) { return ERROR_STACK_OVERFLOW; }
-        s[n++] = t[i];
-      }
-    }
-    */
-
-
   } // end while
 
   return f_def ? ERROR_NONE_FUNC : ERROR_NONE;
