@@ -3,9 +3,6 @@
 #define LOGIC_TRUE -1
 #define LOGIC_FALSE 0
 
-#define DIR_FORWARD   1
-#define DIR_BACKWARD -1
-
 #define ERROR_NONE               0
 #define ERROR_STACK_UNDERFLOW   -1
 #define ERROR_STACK_OVERFLOW    -2
