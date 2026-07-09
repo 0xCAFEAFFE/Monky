@@ -392,9 +392,9 @@ char monky_parse(char* ui_buf, bool *newline)
           f_start = f_pos;
 
           int test = findChar(ui_buf, pos, '{');
-          if (ui_buf[test]) { return ERROR_FUNC_RECURSION; }
-
           int end = findChar(ui_buf, pos, '}');
+          if ((test<0) || (end<0)) { return ERROR_STRING_END; }
+          if (ui_buf[test]) { return ERROR_FUNC_RECURSION; }
           if (!ui_buf[end]) { return ERROR_FUNC_DEF; }
 
           // copy tokens to function buffer
