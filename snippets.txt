@@ -62,5 +62,6 @@ test cases:
 1 -1 ? "hello"
 1 "hello" [ % , ! ]
 5 [ "hell[ooo" [ % , ! ] 1 - % ! ]
+{ "hel}lo" } A :
 
 

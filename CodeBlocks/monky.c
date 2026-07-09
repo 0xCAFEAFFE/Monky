@@ -36,7 +36,7 @@ static int f_start;     // function start offset
 static int f_end;       // function end offset
 static int f_pos;       // position offset for function buffer
 static bool f_def;      // true while function is being defined
-
+#warning "todo: add multi line function support?"
 
 // reset stack and variables but keep function definitions
 void monky_flush(void)
@@ -66,14 +66,15 @@ void monky_reset(void)
 
 
 // skip leading spaces
-void skipSpaces(const char *src, int *p)
+static void skipSpaces(const char *src, int *p)
 {
   while (src[*p] == ' ') { *p+=1; }
 }
 
 
 // find char c in string src starting from offset p
-int findChar(const char *src, int p, char c)
+// skips string literals
+static int findChar(const char *src, int p, char c)
 {
   bool str_lit = false;
 
@@ -93,13 +94,12 @@ int findChar(const char *src, int p, char c)
   return str_lit ? ERROR_STRING_END : p;
 }
 
-
 // get next whitespace separated token out of input string, starting at offset pos
-int getToken(char *src, int *p)
+static int getToken(char *src, int *p)
 {
   // copy from input to global token buffer
   int l = 0; // token length
-  while (src[*p+l] && (src[*p+l] != ' '))
+  while (src[*p+l] && src[*p+l] != ' ')
   {
     t[l] = src[*p+l];
     l++;
@@ -126,9 +126,10 @@ char monky_parse(char* ui_buf, bool *newline)
   {
     // skip leading spaces
     skipSpaces(tok_src, &pos);
+    char sym = tok_src[pos];
 
     // handle string literal
-    if (!f_def && (tok_src[pos] == '"'))
+    if(sym == '"')
     {
       // find end of string
       int end = findChar(tok_src, pos+1, '"');
@@ -147,60 +148,15 @@ char monky_parse(char* ui_buf, bool *newline)
       continue;
     }
 
+    // process next token in line
     len = getToken(tok_src, &pos);
     if (!len) { break; }
 
     // try converting token to literal
-    char *end;
-    int val = strtol(t, &end, 10);
-    char sym = t[0];
+    char *t_end;
+    int val = strtol(t, &t_end, 10);
 
-    // special handling of function keywords before primitive instructions
-    if ((sym == '{') && (len==1))
-    {
-      // function start
-      if (f_def) { return ERROR_FUNC_DEF; }
-      f_def = true;
-      f_start = f_pos;
-      continue;
-    }
-
-    // check if we're defining a function
-    if (f_def)
-    {
-      // copy tokens to function buffer
-      for (int p=pos-len; p<pos+1; p++)
-      {
-        // replace null byte with space for multi line functions
-        f_buf[f_pos++] = ui_buf[p] ? ui_buf[p] : ' ';
-        if (f_pos>=FUNC_BUF_SIZE) { return ERROR_FUNC_BUFFER; }
-      }
-    }
-
-    if ((sym == '}') && (len==1))
-    {
-      // function end
-      if (f_active == -1)
-      {
-        // end of function definition
-        if (!f_def) { return ERROR_FUNC_DEF; }
-        f_def = false;
-        f_end = f_pos;
-      }
-      else
-      {
-        // end of function execution
-        pos = f[f_active].ret_pos;
-        f_active = f[f_active].ret_func;
-        if (f_active == -1) { tok_src = ui_buf; }
-      }
-      continue;
-    }
-
-    // skip primitive token execution
-    if (f_def) { continue; }
-
-    if (!*end)
+    if (!*t_end)
     {
       // push numeric literal to stack
       if (val>127 || val<-128) { return ERROR_LITERAL_INVALID; }
@@ -431,6 +387,44 @@ char monky_parse(char* ui_buf, bool *newline)
           break;
         }
 
+        case '{': // function definition start
+        {
+          f_start = f_pos;
+
+          int test = findChar(ui_buf, pos, '{');
+          if (ui_buf[test]) { return ERROR_FUNC_RECURSION; }
+
+          int end = findChar(ui_buf, pos, '}');
+          if (!ui_buf[end]) { return ERROR_FUNC_DEF; }
+
+          // copy tokens to function buffer
+          for (int p=pos; p<=end; p++)
+          {
+            // replace null byte with space for multi line functions
+            f_buf[f_pos++] = ui_buf[p];
+            if (f_pos>=FUNC_BUF_SIZE) { return ERROR_FUNC_BUFFER; }
+          }
+
+          f_end = f_pos;
+          pos = end+1;
+
+          break;
+        }
+
+        case '}': // function call return
+        {
+          if (f_active == -1) { return ERROR_FUNC_DEF; }
+
+          if (pos >= f[f_active].end)
+          {
+            pos = f[f_active].ret_pos;
+            f_active = f[f_active].ret_func;
+            if (f_active == -1) { tok_src = ui_buf; }
+          }
+
+          break;
+        }
+
         case ':': // store / define
         {
           if (n<1) { return ERROR_STACK_UNDERFLOW; }
@@ -449,7 +443,7 @@ char monky_parse(char* ui_buf, bool *newline)
           }
           else if (s[n-1]>='A' && s[n-1]<='Z')
           {
-            // define function
+            // function
             int i = s[n-1]-'A';
             f[i].start = f_start;
             f[i].end = f_end;
@@ -479,12 +473,6 @@ char monky_parse(char* ui_buf, bool *newline)
             int i = s[n-1]-'A';
             if (f[i].start == f[i].end) { return ERROR_FUNC_UNDEF; }
             n--; // pop index from stack
-
-            // reject recursion
-            for (int j=f_active; j!=-1; j=f[j].ret_func)
-            {
-              if (i==j) { return ERROR_FUNC_RECURSION; }
-            }
 
             // switch token source to function buffer
             f[i].ret_func = f_active;
